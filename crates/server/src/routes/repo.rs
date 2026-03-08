@@ -263,7 +263,16 @@ pub async fn list_open_prs(
         None => deployment.git().get_default_remote(&repo.path)?,
     };
 
-    let git_host = match GitHostService::from_url(&remote.url) {
+    let gitlab_domains = {
+        let config = deployment.config().read().await;
+        config
+            .gitlab_instance_url
+            .as_ref()
+            .map(|url| vec![url.clone()])
+            .unwrap_or_default()
+    };
+    let git_host = match GitHostService::from_url_with_gitlab_domains(&remote.url, &gitlab_domains)
+    {
         Ok(host) => host,
         Err(GitHostError::UnsupportedProvider) => {
             return Ok(ResponseJson(ApiResponse::error_with_data(

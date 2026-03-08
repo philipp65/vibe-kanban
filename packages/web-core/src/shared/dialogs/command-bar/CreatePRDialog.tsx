@@ -27,6 +27,7 @@ import {
   GhCliSetupDialog,
   mapGhCliErrorToUi,
 } from '@/shared/dialogs/auth/GhCliSetupDialog';
+import { GlabCliSetupDialog } from '@/shared/dialogs/auth/GlabCliSetupDialog';
 import type {
   GhCliSupportContent,
   GhCliSupportVariant,
@@ -234,6 +235,12 @@ const CreatePRDialogImpl = create<CreatePRDialogProps>(
         handleGhCliSetupOutcome(setupResult, defaultGhCliErrorMessage);
       };
 
+      const showGlabCliSetupDialog = async () => {
+        await GlabCliSetupDialog.show();
+        setError(null);
+        setGhCliHelp(null);
+      };
+
       if (result.error) {
         if (
           result.error.type === 'cli_not_installed' ||
@@ -242,12 +249,16 @@ const CreatePRDialogImpl = create<CreatePRDialogProps>(
           // Only show setup dialog for GitHub CLI on Mac
           if (result.error.provider === 'git_hub' && isMacEnvironment) {
             await showGhCliSetupDialog();
+          } else if (result.error.provider === 'git_lab') {
+            await showGlabCliSetupDialog();
           } else {
             const providerName =
               result.error.provider === 'git_hub'
                 ? 'GitHub'
                 : result.error.provider === 'azure_dev_ops'
                   ? 'Azure DevOps'
+                  : result.error.provider === 'git_lab'
+                    ? 'GitLab'
                   : 'Git host';
             const action =
               result.error.type === 'cli_not_installed'

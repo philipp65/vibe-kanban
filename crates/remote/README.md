@@ -13,11 +13,15 @@ VIBEKANBAN_REMOTE_JWT_SECRET=your_base64_encoded_secret
 # Required — password for the electric_sync database role used by ElectricSQL
 ELECTRIC_ROLE_PASSWORD=your_secure_password
 
-# OAuth — at least one provider (GitHub or Google) must be configured
+# OAuth — at least one provider (GitHub, Google, or GitLab) must be configured
 GITHUB_OAUTH_CLIENT_ID=your_github_web_app_client_id
 GITHUB_OAUTH_CLIENT_SECRET=your_github_web_app_client_secret
 GOOGLE_OAUTH_CLIENT_ID=
 GOOGLE_OAUTH_CLIENT_SECRET=
+GITLAB_OAUTH_CLIENT_ID=
+GITLAB_OAUTH_CLIENT_SECRET=
+# For self-hosted GitLab, set the base URL (defaults to https://gitlab.com)
+# GITLAB_OAUTH_BASE_URL=https://gitlab.mycompany.com
 
 # Relay (required for tunnel/relay features)
 # For local HTTPS via Caddy on :3001:

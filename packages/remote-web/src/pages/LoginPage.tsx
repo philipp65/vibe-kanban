@@ -64,6 +64,13 @@ export default function LoginPage() {
               loading={pending === "github"}
             />
             <OAuthButton
+              provider="gitlab"
+              label="Continue with GitLab"
+              onClick={() => void handleLogin("gitlab")}
+              disabled={pending !== null}
+              loading={pending === "gitlab"}
+            />
+            <OAuthButton
               provider="google"
               label="Continue with Google"
               onClick={() => void handleLogin("google")}
@@ -111,7 +118,13 @@ function OAuthButton({
       disabled={disabled || loading}
     >
       {loading
-        ? `Opening ${provider === "github" ? "GitHub" : "Google"}...`
+        ? `Opening ${
+            provider === "github"
+              ? "GitHub"
+              : provider === "gitlab"
+                ? "GitLab"
+                : "Google"
+          }...`
         : label}
     </button>
   );

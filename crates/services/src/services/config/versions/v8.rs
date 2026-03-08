@@ -68,6 +68,8 @@ pub struct Config {
     pub relay_enabled: bool,
     #[serde(default)]
     pub relay_host_name: Option<String>,
+    #[serde(default)]
+    pub gitlab_instance_url: Option<String>,
 }
 
 impl Config {
@@ -99,6 +101,7 @@ impl Config {
             send_message_shortcut: SendMessageShortcut::default(),
             relay_enabled: true,
             relay_host_name: None,
+            gitlab_instance_url: None,
         }
     }
 
@@ -155,6 +158,7 @@ impl Default for Config {
             send_message_shortcut: SendMessageShortcut::default(),
             relay_enabled: true,
             relay_host_name: None,
+            gitlab_instance_url: None,
         }
     }
 }

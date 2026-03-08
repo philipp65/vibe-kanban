@@ -36,6 +36,15 @@ use workspace_manager::WorkspaceManager;
 
 use crate::{DeploymentImpl, error::ApiError};
 
+async fn get_custom_gitlab_domains(deployment: &impl Deployment) -> Vec<String> {
+    let config = deployment.config().read().await;
+    config
+        .gitlab_instance_url
+        .as_ref()
+        .map(|url| vec![url.clone()])
+        .unwrap_or_default()
+}
+
 #[derive(Debug, Deserialize, Serialize, TS)]
 pub struct CreatePrApiRequest {
     pub title: String,
@@ -265,20 +274,22 @@ pub async fn create_pr(
         }
     }
 
-    let git_host = match GitHostService::from_url(&target_remote.url) {
-        Ok(host) => host,
-        Err(GitHostError::UnsupportedProvider) => {
-            return Ok(ResponseJson(ApiResponse::error_with_data(
-                PrError::UnsupportedProvider,
-            )));
-        }
-        Err(GitHostError::CliNotInstalled { provider }) => {
-            return Ok(ResponseJson(ApiResponse::error_with_data(
-                PrError::CliNotInstalled { provider },
-            )));
-        }
-        Err(e) => return Err(ApiError::GitHost(e)),
-    };
+    let gitlab_domains = get_custom_gitlab_domains(&*deployment).await;
+    let git_host =
+        match GitHostService::from_url_with_gitlab_domains(&target_remote.url, &gitlab_domains) {
+            Ok(host) => host,
+            Err(GitHostError::UnsupportedProvider) => {
+                return Ok(ResponseJson(ApiResponse::error_with_data(
+                    PrError::UnsupportedProvider,
+                )));
+            }
+            Err(GitHostError::CliNotInstalled { provider }) => {
+                return Ok(ResponseJson(ApiResponse::error_with_data(
+                    PrError::CliNotInstalled { provider },
+                )));
+            }
+            Err(e) => return Err(ApiError::GitHost(e)),
+        };
 
     let provider = git_host.provider_kind();
 
@@ -412,7 +423,9 @@ pub async fn attach_existing_pr(
     let git = deployment.git();
     let remote = git.resolve_remote_for_branch(&repo.path, &workspace_repo.target_branch)?;
 
-    let git_host = match GitHostService::from_url(&remote.url) {
+    let gitlab_domains = get_custom_gitlab_domains(&*deployment).await;
+    let git_host = match GitHostService::from_url_with_gitlab_domains(&remote.url, &gitlab_domains)
+    {
         Ok(host) => host,
         Err(GitHostError::UnsupportedProvider) => {
             return Ok(ResponseJson(ApiResponse::error_with_data(
@@ -562,7 +575,9 @@ pub async fn get_pr_comments(
     let git = deployment.git();
     let remote = git.resolve_remote_for_branch(&repo.path, &workspace_repo.target_branch)?;
 
-    let git_host = match GitHostService::from_url(&remote.url) {
+    let gitlab_domains = get_custom_gitlab_domains(&*deployment).await;
+    let git_host = match GitHostService::from_url_with_gitlab_domains(&remote.url, &gitlab_domains)
+    {
         Ok(host) => host,
         Err(GitHostError::CliNotInstalled { provider }) => {
             return Ok(ResponseJson(ApiResponse::error_with_data(

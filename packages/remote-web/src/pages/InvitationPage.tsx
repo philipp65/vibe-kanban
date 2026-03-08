@@ -141,6 +141,13 @@ export default function InvitationPage() {
                 loading={pendingProvider === "github"}
               />
               <OAuthButton
+                provider="gitlab"
+                label="Continue with GitLab"
+                onClick={() => void handleOAuthLogin("gitlab")}
+                disabled={pendingProvider !== null}
+                loading={pendingProvider === "gitlab"}
+              />
+              <OAuthButton
                 provider="google"
                 label="Continue with Google"
                 onClick={() => void handleOAuthLogin("google")}
@@ -177,7 +184,13 @@ function OAuthButton({
       disabled={disabled || loading}
     >
       {loading
-        ? `Opening ${provider === "github" ? "GitHub" : "Google"}...`
+        ? `Opening ${
+            provider === "github"
+              ? "GitHub"
+              : provider === "gitlab"
+                ? "GitLab"
+                : "Google"
+          }...`
         : label}
     </button>
   );
