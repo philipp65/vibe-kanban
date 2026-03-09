@@ -274,7 +274,7 @@ pub async fn create_pr(
         }
     }
 
-    let gitlab_domains = get_custom_gitlab_domains(&*deployment).await;
+    let gitlab_domains = get_custom_gitlab_domains(&deployment).await;
     let git_host =
         match GitHostService::from_url_with_gitlab_domains(&target_remote.url, &gitlab_domains) {
             Ok(host) => host,
@@ -423,7 +423,7 @@ pub async fn attach_existing_pr(
     let git = deployment.git();
     let remote = git.resolve_remote_for_branch(&repo.path, &workspace_repo.target_branch)?;
 
-    let gitlab_domains = get_custom_gitlab_domains(&*deployment).await;
+    let gitlab_domains = get_custom_gitlab_domains(&deployment).await;
     let git_host = match GitHostService::from_url_with_gitlab_domains(&remote.url, &gitlab_domains)
     {
         Ok(host) => host,
@@ -575,7 +575,7 @@ pub async fn get_pr_comments(
     let git = deployment.git();
     let remote = git.resolve_remote_for_branch(&repo.path, &workspace_repo.target_branch)?;
 
-    let gitlab_domains = get_custom_gitlab_domains(&*deployment).await;
+    let gitlab_domains = get_custom_gitlab_domains(&deployment).await;
     let git_host = match GitHostService::from_url_with_gitlab_domains(&remote.url, &gitlab_domains)
     {
         Ok(host) => host,
