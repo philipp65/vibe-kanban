@@ -26,6 +26,8 @@ WORKDIR /app
 # Copy package files for dependency caching
 COPY package*.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/local-web/package*.json ./packages/local-web/
+COPY packages/web-core/package*.json ./packages/web-core/
+COPY packages/ui/package*.json ./packages/ui/
 COPY npx-cli/package*.json ./npx-cli/
 
 # Install pnpm and dependencies
