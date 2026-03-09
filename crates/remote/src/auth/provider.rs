@@ -835,7 +835,7 @@ impl AuthorizationProvider for GitLabOAuthProvider {
     }
 
     fn scopes(&self) -> &[&str] {
-        &["read_user", "openid", "email"]
+        &["read_user", "openid", "email", "read_api"]
     }
 
     fn authorize_url(&self, state: &str, redirect_uri: &str) -> Result<Url> {

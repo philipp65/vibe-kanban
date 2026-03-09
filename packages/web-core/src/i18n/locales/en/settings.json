@@ -559,12 +559,22 @@
       },
       "actions": {
         "addProject": "Add Project",
-        "importGitLabProject": "Import from GitLab project"
+        "importGitLabProject": "Import from GitLab project",
+        "importGitLabProjectLoading": "Importing..."
       },
       "importGitLab": {
         "pathPrompt": "Enter GitLab project path (for example: group/project):",
         "success": "Imported project and issues from GitLab successfully",
-        "error": "Failed to import project from GitLab"
+        "error": "Failed to import project from GitLab",
+        "dialog": {
+          "title": "Import from GitLab project",
+          "description": "Search and select a GitLab project to import its issues.",
+          "searchPlaceholder": "Search by project name or namespace",
+          "searching": "Searching projects...",
+          "searchError": "Failed to search GitLab projects",
+          "empty": "No GitLab projects found",
+          "import": "Import"
+        }
       },
       "form": {
         "name": {

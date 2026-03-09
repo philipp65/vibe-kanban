@@ -1360,6 +1360,29 @@ export const remoteProjectsApi = {
       imported_issues: number;
     }>(response);
   },
+  searchGitLabProjects: async (query: string): Promise<
+    {
+      id: number;
+      name: string;
+      path_with_namespace: string;
+      name_with_namespace?: string | null;
+      web_url?: string | null;
+    }[]
+  > => {
+    const response = await makeRemoteRequest(
+      `/v1/gitlab/projects/search?query=${encodeURIComponent(query)}`
+    );
+    const result = await handleRemoteResponse<{
+      projects: {
+        id: number;
+        name: string;
+        path_with_namespace: string;
+        name_with_namespace?: string | null;
+        web_url?: string | null;
+      }[];
+    }>(response);
+    return result.projects;
+  },
 };
 
 // Scratch API

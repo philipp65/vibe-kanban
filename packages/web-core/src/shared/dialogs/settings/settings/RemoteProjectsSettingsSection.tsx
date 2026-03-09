@@ -70,6 +70,7 @@ import {
 import { useSettingsDirty } from './SettingsDirtyContext';
 import type { DraftWorkspaceRepo, GitBranch, Repo } from 'shared/types';
 import { remoteProjectsApi, repoApi } from '@/shared/lib/api';
+import { GitLabProjectImportDialog } from './GitLabProjectImportDialog';
 import {
   SelectionDialog,
   type SelectionPage,
@@ -358,6 +359,7 @@ export function RemoteProjectsSettingsSection({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isImportingGitLab, setIsImportingGitLab] = useState(false);
 
   // Default repos state
   const [defaultRepos, setDefaultRepos] = useState<DraftWorkspaceRepo[]>([]);
@@ -904,21 +906,14 @@ export function RemoteProjectsSettingsSection({
   const handleImportGitLabProject = async () => {
     if (!selectedOrgId) return;
 
-    const gitlabProjectPath = window
-      .prompt(
-        t(
-          'settings.remoteProjects.importGitLab.pathPrompt',
-          'Enter GitLab project path (for example: group/project):'
-        )
-      )
-      ?.trim();
-
-    if (!gitlabProjectPath) return;
-
     setError(null);
     setSuccess(null);
+    setIsImportingGitLab(true);
 
     try {
+      const gitlabProjectPath = (await GitLabProjectImportDialog.show())?.trim();
+      if (!gitlabProjectPath) return;
+
       const result = await remoteProjectsApi.importGitLabProjectIssues({
         organization_id: selectedOrgId,
         gitlab_project_path: gitlabProjectPath,
@@ -941,6 +936,8 @@ export function RemoteProjectsSettingsSection({
               'Failed to import project from GitLab'
             );
       setError(message);
+    } finally {
+      setIsImportingGitLab(false);
     }
   };
 
@@ -1156,7 +1153,7 @@ export function RemoteProjectsSettingsSection({
                   <button
                     className="px-half py-1 rounded-sm hover:bg-secondary text-low hover:text-normal inline-flex items-center gap-half"
                     onClick={handleImportGitLabProject}
-                    disabled={isSaving}
+                    disabled={isSaving || isImportingGitLab}
                     title={t(
                       'settings.remoteProjects.actions.importGitLabProject',
                       'Import from GitLab project'
@@ -1164,10 +1161,15 @@ export function RemoteProjectsSettingsSection({
                   >
                     <PlusIcon className="size-icon-2xs" weight="bold" />
                     <span className="text-xs">
-                      {t(
-                        'settings.remoteProjects.actions.importGitLabProject',
-                        'Import from GitLab project'
-                      )}
+                      {isImportingGitLab
+                        ? t(
+                            'settings.remoteProjects.actions.importGitLabProjectLoading',
+                            'Importing...'
+                          )
+                        : t(
+                            'settings.remoteProjects.actions.importGitLabProject',
+                            'Import from GitLab project'
+                          )}
                     </span>
                   </button>
                   <button

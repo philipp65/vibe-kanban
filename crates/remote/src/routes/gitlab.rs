@@ -1,12 +1,13 @@
 use api_types::{BulkMigrateRequest, MigrateIssueRequest, MigrateProjectRequest};
 use axum::{
     Json, Router,
-    extract::{Extension, State},
+    extract::{Extension, Query, State},
     http::StatusCode,
-    routing::post,
+    routing::{get, post},
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use url::Url;
 use urlencoding::encode;
 use uuid::Uuid;
 
@@ -21,7 +22,9 @@ use crate::{
 };
 
 pub fn router() -> Router<AppState> {
-    Router::new().route("/gitlab/import/project-issues", post(import_project_issues))
+    Router::new()
+        .route("/gitlab/import/project-issues", post(import_project_issues))
+        .route("/gitlab/projects/search", get(search_projects))
 }
 
 #[derive(Debug, Deserialize)]
@@ -56,6 +59,26 @@ struct GitLabIssue {
     state: String,
     web_url: Option<String>,
     created_at: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SearchGitLabProjectsRequest {
+    #[serde(default)]
+    pub query: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SearchGitLabProjectsResponse {
+    pub projects: Vec<GitLabProjectSearchResult>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct GitLabProjectSearchResult {
+    pub id: i64,
+    pub name: String,
+    pub path_with_namespace: String,
+    pub name_with_namespace: Option<String>,
+    pub web_url: Option<String>,
 }
 
 async fn get_gitlab_access_token(
@@ -112,6 +135,81 @@ fn gitlab_base_url(state: &AppState) -> String {
         .to_string()
 }
 
+fn parse_project_path_from_reference(base_url: &str, reference: &str) -> String {
+    let trimmed = reference.trim().trim_start_matches('/');
+    if trimmed.is_empty() {
+        return String::new();
+    }
+
+    let parsed_base = Url::parse(base_url).ok();
+    let parsed_ref = Url::parse(trimmed).ok();
+
+    if let (Some(base), Some(reference_url)) = (parsed_base, parsed_ref) {
+        if base.host_str() == reference_url.host_str() {
+            let mut parts = reference_url
+                .path_segments()
+                .map(|segments| {
+                    segments
+                        .filter(|segment| !segment.is_empty())
+                        .map(ToString::to_string)
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+
+            if let Some(suffix_start) = parts.iter().position(|segment| segment == "-") {
+                parts.truncate(suffix_start);
+            }
+
+            if !parts.is_empty() {
+                return parts.join("/");
+            }
+        }
+    }
+
+    trimmed.to_string()
+}
+
+async fn build_gitlab_error_response(
+    response: reqwest::Response,
+    action: &str,
+) -> ErrorResponse {
+    let status = response.status();
+    let body = response.text().await.unwrap_or_default();
+    let body_msg = body
+        .trim()
+        .chars()
+        .take(300)
+        .collect::<String>()
+        .replace('\n', " ");
+
+    if status == StatusCode::UNAUTHORIZED || status == StatusCode::FORBIDDEN {
+        return ErrorResponse::new(
+            StatusCode::FORBIDDEN,
+            format!(
+                "GitLab authorization failed while {action}. Reconnect GitLab with scope read_api (and read_user/openid/email)."
+            ),
+        );
+    }
+
+    if status == StatusCode::NOT_FOUND {
+        return ErrorResponse::new(
+            StatusCode::NOT_FOUND,
+            "GitLab project not found or not accessible",
+        );
+    }
+
+    let suffix = if body_msg.is_empty() {
+        String::new()
+    } else {
+        format!(": {body_msg}")
+    };
+
+    ErrorResponse::new(
+        StatusCode::BAD_GATEWAY,
+        format!("GitLab API error while {action} (status {status}){suffix}"),
+    )
+}
+
 async fn fetch_gitlab_project(
     state: &AppState,
     access_token: &str,
@@ -132,22 +230,12 @@ async fn fetch_gitlab_project(
             ErrorResponse::new(StatusCode::BAD_GATEWAY, "failed to reach GitLab API")
         })?;
 
-    if response.status() == StatusCode::NOT_FOUND {
-        return Err(ErrorResponse::new(
-            StatusCode::NOT_FOUND,
-            "GitLab project not found or not accessible",
-        ));
-    }
-
     if !response.status().is_success() {
         tracing::warn!(
             status = %response.status(),
             "gitlab project endpoint returned non-success"
         );
-        return Err(ErrorResponse::new(
-            StatusCode::BAD_GATEWAY,
-            "GitLab API returned an error while loading project",
-        ));
+        return Err(build_gitlab_error_response(response, "loading project").await);
     }
 
     response.json::<GitLabProject>().await.map_err(|error| {
@@ -192,10 +280,7 @@ async fn fetch_gitlab_issues(
                 page,
                 "gitlab issues endpoint returned non-success"
             );
-            return Err(ErrorResponse::new(
-                StatusCode::BAD_GATEWAY,
-                "GitLab API returned an error while loading issues",
-            ));
+            return Err(build_gitlab_error_response(response, "loading issues").await);
         }
 
         let next_page = response
@@ -224,6 +309,66 @@ async fn fetch_gitlab_issues(
     Ok(all_issues)
 }
 
+async fn fetch_gitlab_projects(
+    state: &AppState,
+    access_token: &str,
+    base_url: &str,
+    query: &str,
+) -> Result<Vec<GitLabProjectSearchResult>, ErrorResponse> {
+    let query_trimmed = query.trim();
+    let search_param = if query_trimmed.is_empty() {
+        String::new()
+    } else {
+        format!("&search={}", encode(query_trimmed))
+    };
+    let url = format!(
+        "{base_url}/api/v4/projects?membership=true&simple=true&per_page=100&order_by=last_activity_at&sort=desc{search_param}"
+    );
+
+    let response = state
+        .http_client
+        .get(url)
+        .bearer_auth(access_token)
+        .send()
+        .await
+        .map_err(|error| {
+            tracing::error!(?error, "failed to call GitLab projects endpoint");
+            ErrorResponse::new(StatusCode::BAD_GATEWAY, "failed to reach GitLab API")
+        })?;
+
+    if !response.status().is_success() {
+        tracing::warn!(
+            status = %response.status(),
+            "gitlab projects endpoint returned non-success"
+        );
+        return Err(build_gitlab_error_response(response, "searching projects").await);
+    }
+
+    response
+        .json::<Vec<GitLabProjectSearchResult>>()
+        .await
+        .map_err(|error| {
+            tracing::error!(?error, "failed to decode GitLab projects response");
+            ErrorResponse::new(
+                StatusCode::BAD_GATEWAY,
+                "Invalid GitLab response while searching projects",
+            )
+        })
+}
+
+pub async fn search_projects(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<RequestContext>,
+    Query(payload): Query<SearchGitLabProjectsRequest>,
+) -> Result<Json<SearchGitLabProjectsResponse>, ErrorResponse> {
+    let access_token = get_gitlab_access_token(&state, ctx.user.id).await?;
+    let base_url = gitlab_base_url(&state);
+
+    let projects = fetch_gitlab_projects(&state, &access_token, &base_url, &payload.query).await?;
+
+    Ok(Json(SearchGitLabProjectsResponse { projects }))
+}
+
 pub async fn import_project_issues(
     State(state): State<AppState>,
     Extension(ctx): Extension<RequestContext>,
@@ -231,7 +376,8 @@ pub async fn import_project_issues(
 ) -> Result<Json<ImportGitLabProjectIssuesResponse>, ErrorResponse> {
     ensure_member_access(state.pool(), payload.organization_id, ctx.user.id).await?;
 
-    let project_path = payload.gitlab_project_path.trim().trim_start_matches('/');
+    let base_url = gitlab_base_url(&state);
+    let project_path = parse_project_path_from_reference(&base_url, &payload.gitlab_project_path);
     if project_path.is_empty() {
         return Err(ErrorResponse::new(
             StatusCode::BAD_REQUEST,
@@ -240,9 +386,9 @@ pub async fn import_project_issues(
     }
 
     let access_token = get_gitlab_access_token(&state, ctx.user.id).await?;
-    let base_url = gitlab_base_url(&state);
 
-    let gitlab_project = fetch_gitlab_project(&state, &access_token, &base_url, project_path).await?;
+    let gitlab_project =
+        fetch_gitlab_project(&state, &access_token, &base_url, &project_path).await?;
     let gitlab_issues = fetch_gitlab_issues(
         &state,
         &access_token,
