@@ -604,9 +604,9 @@ export function GeneralSettingsSection() {
           description={t('settings.general.gitlab.instanceUrl.helper')}
         >
           <SettingsInput
-            value={draft?.gitlab_instance_url ?? ''}
+            value={(draft as { gitlab_instance_url?: string | null } | null)?.gitlab_instance_url ?? ''}
             onChange={(value) =>
-              updateDraft({ gitlab_instance_url: value || null })
+              updateDraft({ gitlab_instance_url: value || null } as Partial<typeof config>)
             }
             placeholder="https://gitlab.mycompany.com"
           />

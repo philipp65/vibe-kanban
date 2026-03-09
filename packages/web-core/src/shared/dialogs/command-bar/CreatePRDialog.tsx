@@ -242,24 +242,27 @@ const CreatePRDialogImpl = create<CreatePRDialogProps>(
       };
 
       if (result.error) {
+        const provider = String(
+          (result.error as { provider?: string }).provider ?? ''
+        );
         if (
           result.error.type === 'cli_not_installed' ||
           result.error.type === 'cli_not_logged_in'
         ) {
           // Only show setup dialog for GitHub CLI on Mac
-          if (result.error.provider === 'git_hub' && isMacEnvironment) {
+          if (provider === 'git_hub' && isMacEnvironment) {
             await showGhCliSetupDialog();
-          } else if (result.error.provider === 'git_lab') {
+          } else if (provider === 'git_lab') {
             await showGlabCliSetupDialog();
           } else {
             const providerName =
-              result.error.provider === 'git_hub'
+              provider === 'git_hub'
                 ? 'GitHub'
-                : result.error.provider === 'azure_dev_ops'
+                : provider === 'azure_dev_ops'
                   ? 'Azure DevOps'
-                  : result.error.provider === 'git_lab'
+                  : provider === 'git_lab'
                     ? 'GitLab'
-                  : 'Git host';
+                    : 'Git host';
             const action =
               result.error.type === 'cli_not_installed'
                 ? 'not installed'
