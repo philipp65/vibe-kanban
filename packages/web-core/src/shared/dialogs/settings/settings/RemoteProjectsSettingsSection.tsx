@@ -69,7 +69,7 @@ import {
 } from './SettingsComponents';
 import { useSettingsDirty } from './SettingsDirtyContext';
 import type { DraftWorkspaceRepo, GitBranch, Repo } from 'shared/types';
-import { repoApi } from '@/shared/lib/api';
+import { remoteProjectsApi, repoApi } from '@/shared/lib/api';
 import {
   SelectionDialog,
   type SelectionPage,
@@ -510,9 +510,8 @@ export function RemoteProjectsSettingsSection({
     Promise.all([
       getProjectRepoDefaults(selectedProjectId),
       repoApi.list().catch(() => {
-        setDefaultReposError(
-          t('settings:settings.remoteProjects.form.defaultRepos.fetchError')
-        );
+        // In remote/cloud usage there may be no local repo registry available.
+        // Treat this as "no registered repos" rather than a hard error.
         return [] as Repo[];
       }),
     ])
@@ -892,6 +891,49 @@ export function RemoteProjectsSettingsSection({
     }
   };
 
+  const handleImportGitLabProject = async () => {
+    if (!selectedOrgId) return;
+
+    const gitlabProjectPath = window
+      .prompt(
+        t(
+          'settings.remoteProjects.importGitLab.pathPrompt',
+          'Enter GitLab project path (for example: group/project):'
+        )
+      )
+      ?.trim();
+
+    if (!gitlabProjectPath) return;
+
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const result = await remoteProjectsApi.importGitLabProjectIssues({
+        organization_id: selectedOrgId,
+        gitlab_project_path: gitlabProjectPath,
+      });
+
+      setSelectedProjectId(result.project_id);
+      setSuccess(
+        t(
+          'settings.remoteProjects.importGitLab.success',
+          'Imported project and issues from GitLab successfully'
+        )
+      );
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (importError) {
+      const message =
+        importError instanceof Error
+          ? importError.message
+          : t(
+              'settings.remoteProjects.importGitLab.error',
+              'Failed to import project from GitLab'
+            );
+      setError(message);
+    }
+  };
+
   const handleDeleteProject = async (project: Project) => {
     try {
       const result = await DeleteRemoteProjectDialog.show({
@@ -1100,17 +1142,30 @@ export function RemoteProjectsSettingsSection({
             label={t('settings.remoteProjects.columns.projects', 'Projects')}
             headerAction={
               selectedOrgId && (
-                <button
-                  className="p-half rounded-sm hover:bg-secondary text-low hover:text-normal"
-                  onClick={handleCreateProject}
-                  disabled={isSaving}
-                  title={t(
-                    'settings.remoteProjects.actions.addProject',
-                    'Add Project'
-                  )}
-                >
-                  <PlusIcon className="size-icon-2xs" weight="bold" />
-                </button>
+                <div className="flex items-center gap-half">
+                  <button
+                    className="p-half rounded-sm hover:bg-secondary text-low hover:text-normal"
+                    onClick={handleImportGitLabProject}
+                    disabled={isSaving}
+                    title={t(
+                      'settings.remoteProjects.actions.importGitLabProject',
+                      'Import from GitLab project'
+                    )}
+                  >
+                    <PlusIcon className="size-icon-2xs" weight="bold" />
+                  </button>
+                  <button
+                    className="p-half rounded-sm hover:bg-secondary text-low hover:text-normal"
+                    onClick={handleCreateProject}
+                    disabled={isSaving}
+                    title={t(
+                      'settings.remoteProjects.actions.addProject',
+                      'Add Project'
+                    )}
+                  >
+                    <PlusIcon className="size-icon-2xs" weight="bold" />
+                  </button>
+                </div>
               )
             }
           >

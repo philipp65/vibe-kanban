@@ -1339,6 +1339,27 @@ export const remoteProjectsApi = {
       await handleApiResponse<ListRemoteProjectsResponse>(response);
     return result.projects;
   },
+
+  importGitLabProjectIssues: async (data: {
+    organization_id: string;
+    gitlab_project_path: string;
+    include_closed_issues?: boolean;
+  }): Promise<{
+    project_id: string;
+    project_name: string;
+    imported_issues: number;
+  }> => {
+    const response = await makeRemoteRequest('/v1/gitlab/import/project-issues', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return handleRemoteResponse<{
+      project_id: string;
+      project_name: string;
+      imported_issues: number;
+    }>(response);
+  },
 };
 
 // Scratch API

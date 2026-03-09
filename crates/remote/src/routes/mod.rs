@@ -28,6 +28,7 @@ pub mod attachments;
 pub(crate) mod electric_proxy;
 pub(crate) mod error;
 mod github_app;
+mod gitlab;
 pub mod hosts;
 mod identity;
 pub mod issue_assignees;
@@ -114,6 +115,7 @@ pub fn router(state: AppState) -> Router {
         .merge(oauth::protected_router())
         .merge(electric_proxy::router())
         .merge(github_app::protected_router())
+        .merge(gitlab::router())
         .merge(project_statuses::router())
         .merge(tags::router())
         .merge(issue_comments::router())
