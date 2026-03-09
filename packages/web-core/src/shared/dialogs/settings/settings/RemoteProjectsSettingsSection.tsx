@@ -43,7 +43,7 @@ import { OAuthDialog } from '@/shared/dialogs/global/OAuthDialog';
 import { CreateRemoteProjectDialog } from '@/shared/dialogs/org/CreateRemoteProjectDialog';
 import { DeleteRemoteProjectDialog } from '@/shared/dialogs/org/DeleteRemoteProjectDialog';
 import { useShape } from '@/shared/integrations/electric/hooks';
-import { bulkUpdateProjectStatuses } from '@/shared/lib/remoteApi';
+import { bulkUpdateProjects } from '@/shared/lib/remoteApi';
 
 import {
   PROJECTS_SHAPE,
@@ -407,7 +407,6 @@ export function RemoteProjectsSettingsSection({
   const {
     data: projects,
     isLoading: projectsLoading,
-    update,
     remove,
   } = useShape(PROJECTS_SHAPE, params, {
     enabled: !!selectedOrgId,
@@ -778,7 +777,7 @@ export function RemoteProjectsSettingsSection({
       }
     }
 
-    const bulkUpdates: {
+    const statusUpdates: {
       id: string;
       changes: Partial<{
         name: string;
@@ -809,23 +808,23 @@ export function RemoteProjectsSettingsSection({
         color: string;
         sort_order: number;
         hidden: boolean;
-      }> = {
-        sort_order: local.sort_order,
-      };
+      }> = {};
 
       if (local.name !== original.name) changes.name = local.name;
       if (local.color !== original.color) changes.color = local.color;
+      if (local.sort_order !== original.sort_order)
+        changes.sort_order = local.sort_order;
       if (local.hidden !== original.hidden) changes.hidden = local.hidden;
 
-      bulkUpdates.push({ id: local.id, changes });
+      if (Object.keys(changes).length > 0) {
+        statusUpdates.push({ id: local.id, changes });
+      }
     }
 
-    if (bulkUpdates.length > 1) {
-      await bulkUpdateProjectStatuses(bulkUpdates);
-    } else if (bulkUpdates.length === 1) {
+    for (const statusUpdate of statusUpdates) {
       const result = updateProjectStatus(
-        bulkUpdates[0].id,
-        bulkUpdates[0].changes
+        statusUpdate.id,
+        statusUpdate.changes
       );
       mutationPromises.push(result.persisted);
     }
@@ -920,6 +919,13 @@ export function RemoteProjectsSettingsSection({
       });
 
       setSelectedProjectId(result.project_id);
+      setFormState({
+        name: result.project_name,
+        color: '217 91% 60%',
+      });
+      setHasStatusChanges(false);
+      setEditingStatusId(null);
+      setEditingStatusColorId(null);
       setSuccess(
         t(
           'settings.remoteProjects.importGitLab.success',
@@ -982,11 +988,15 @@ export function RemoteProjectsSettingsSection({
 
     try {
       if (isProjectDirty) {
-        const result = update(selectedProjectId, {
-          name: trimmedName,
-          color: formState.color,
-        });
-        await result.persisted;
+        await bulkUpdateProjects([
+          {
+            id: selectedProjectId,
+            changes: {
+              name: trimmedName,
+              color: formState.color,
+            },
+          },
+        ]);
       }
 
       if (hasStatusChanges) {
