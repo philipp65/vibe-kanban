@@ -49,7 +49,9 @@ RUN apk add --no-cache \
     ca-certificates \
     tini \
     libgcc \
-    wget
+    wget \
+    git \
+    glab
 
 # Create app user for security
 RUN addgroup -g 1001 -S appgroup && \
