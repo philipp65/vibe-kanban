@@ -339,6 +339,9 @@ export function RemoteProjectsSettingsSection({
   const { t } = useTranslation(['settings', 'common', 'projects']);
   const { setDirty: setContextDirty } = useSettingsDirty();
   const { isSignedIn, isLoaded } = useAuth();
+  const hasHostContext =
+    typeof window !== 'undefined' &&
+    /\/hosts\/[^/]+/.test(window.location.pathname);
 
   // Selection state - initialize with provided values
   const [selectedOrgId, setSelectedOrgId] = useState<string | null>(
@@ -504,6 +507,13 @@ export function RemoteProjectsSettingsSection({
       setDefaultReposError(null);
       return;
     }
+    if (!hasHostContext) {
+      setDefaultRepos([]);
+      setAllRepos([]);
+      setDefaultReposError(null);
+      setIsLoadingDefaults(false);
+      return;
+    }
     setIsLoadingDefaults(true);
     setDefaultReposError(null);
 
@@ -521,7 +531,7 @@ export function RemoteProjectsSettingsSection({
       })
       .catch(() => setDefaultRepos([]))
       .finally(() => setIsLoadingDefaults(false));
-  }, [selectedProjectId, t]);
+  }, [selectedProjectId, hasHostContext]);
 
   const defaultRepoIds = useMemo(
     () => new Set(defaultRepos.map((r) => r.repo_id)),
@@ -1144,7 +1154,7 @@ export function RemoteProjectsSettingsSection({
               selectedOrgId && (
                 <div className="flex items-center gap-half">
                   <button
-                    className="p-half rounded-sm hover:bg-secondary text-low hover:text-normal"
+                    className="px-half py-1 rounded-sm hover:bg-secondary text-low hover:text-normal inline-flex items-center gap-half"
                     onClick={handleImportGitLabProject}
                     disabled={isSaving}
                     title={t(
@@ -1153,6 +1163,12 @@ export function RemoteProjectsSettingsSection({
                     )}
                   >
                     <PlusIcon className="size-icon-2xs" weight="bold" />
+                    <span className="text-xs">
+                      {t(
+                        'settings.remoteProjects.actions.importGitLabProject',
+                        'Import from GitLab project'
+                      )}
+                    </span>
                   </button>
                   <button
                     className="p-half rounded-sm hover:bg-secondary text-low hover:text-normal"
@@ -1253,7 +1269,7 @@ export function RemoteProjectsSettingsSection({
           </div>
         )}
 
-        {selectedProjectId && (
+        {selectedProjectId && hasHostContext && (
           <div
             className={cn(
               'bg-secondary/50 border border-border rounded-sm p-4 space-y-base',
@@ -1418,6 +1434,16 @@ export function RemoteProjectsSettingsSection({
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+          </div>
+        )}
+        {selectedProjectId && !hasHostContext && (
+          <div className="bg-secondary/30 border border-border rounded-sm p-4">
+            <p className="text-sm text-low">
+              {t(
+                'settings.remoteProjects.form.defaultRepos.hostContextHint',
+                'Default repositories can only be configured inside a host-scoped workspace route.'
+              )}
+            </p>
           </div>
         )}
 
