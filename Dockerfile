@@ -7,14 +7,12 @@ RUN apk add --no-cache \
     build-base \
     perl \
     llvm-dev \
-    clang-dev
+    clang-dev \
+    rust \
+    cargo
 
 # Allow linking libclang on musl
 ENV RUSTFLAGS="-C target-feature=-crt-static"
-
-# Install Rust
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-ENV PATH="/root/.cargo/bin:${PATH}"
 
 ARG POSTHOG_API_KEY
 ARG POSTHOG_API_ENDPOINT
