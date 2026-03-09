@@ -300,37 +300,24 @@ impl GlabCli {
 impl GlabCli {
     fn parse_mr_create_response(raw: &str) -> Result<PullRequestInfo, GlabCliError> {
         // glab mr create --output json returns a JSON object
-        let mr: GlabMrCreateResponse = serde_json::from_str(raw.trim()).map_err(|e| {
-            // Fallback: try parsing as text output (URL on last line)
-            if let Some(info) = Self::parse_mr_create_text(raw) {
-                return GlabCliError::UnexpectedOutput(format!("_fallback_ok_{}", info.url));
-            }
-            GlabCliError::UnexpectedOutput(format!(
-                "Failed to parse glab mr create response: {e}; raw: {raw}"
-            ))
-        });
-
-        match mr {
-            Ok(mr) => Ok(PullRequestInfo {
+        if let Ok(mr) = serde_json::from_str::<GlabMrCreateResponse>(raw.trim()) {
+            return Ok(PullRequestInfo {
                 number: mr.iid,
                 url: mr.web_url,
                 status: MergeStatus::Open,
                 merged_at: None,
                 merge_commit_sha: None,
-            }),
-            Err(GlabCliError::UnexpectedOutput(msg)) if msg.starts_with("_fallback_ok_") => {
-                let url = msg.strip_prefix("_fallback_ok_").unwrap();
-                let number = Self::extract_mr_number_from_url(url).unwrap_or(0);
-                Ok(PullRequestInfo {
-                    number,
-                    url: url.to_string(),
-                    status: MergeStatus::Open,
-                    merged_at: None,
-                    merge_commit_sha: None,
-                })
-            }
-            Err(e) => Err(e),
+            });
         }
+
+        // Fallback: parse plain text output if JSON output is not available.
+        if let Some(info) = Self::parse_mr_create_text(raw) {
+            return Ok(info);
+        }
+
+        Err(GlabCliError::UnexpectedOutput(format!(
+            "Failed to parse glab mr create response; raw: {raw}"
+        )))
     }
 
     fn parse_mr_create_text(raw: &str) -> Option<PullRequestInfo> {

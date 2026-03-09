@@ -87,6 +87,7 @@ impl GitHostProvider for GitLabProvider {
         }
 
         let repo_info = self.get_repo_info(remote_url, repo_path).await?;
+        let head_branch = request.head_branch.clone();
 
         (|| async {
             let cli = self.glab_cli.clone();
@@ -106,7 +107,7 @@ impl GitHostProvider for GitLabProvider {
 
             info!(
                 "Created GitLab MR !{} for branch {}",
-                cli_result.number, request.head_branch
+                cli_result.number, head_branch
             );
 
             Ok(cli_result)

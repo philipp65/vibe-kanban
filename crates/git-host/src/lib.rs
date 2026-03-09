@@ -9,7 +9,7 @@ use std::path::Path;
 
 use async_trait::async_trait;
 use db::models::merge::PullRequestInfo;
-use detection::{detect_provider_from_url, detect_provider_from_url_with_custom_gitlab_domains};
+use detection::detect_provider_from_url_with_custom_gitlab_domains;
 use enum_dispatch::enum_dispatch;
 pub use types::{
     CreatePrRequest, GitHostError, OpenPrInfo, PrComment, PrCommentAuthor, PrReviewComment,
