@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1.6
+
 # Build stage
 FROM node:24-alpine AS builder
 
@@ -31,15 +33,24 @@ COPY packages/ui/package*.json ./packages/ui/
 COPY npx-cli/package*.json ./npx-cli/
 
 # Install pnpm and dependencies
-RUN npm install -g pnpm && pnpm install
+RUN --mount=type=cache,target=/root/.npm \
+    --mount=type=cache,target=/pnpm/store \
+    npm install -g pnpm && \
+    pnpm config set store-dir /pnpm/store && \
+    pnpm install --frozen-lockfile
 
 # Copy source code
 COPY . .
 
 # Build application
-RUN npm run generate-types
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/local/cargo/git \
+    npm run generate-types
 RUN cd packages/local-web && pnpm run build
-RUN cargo build --release --bin server
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/local/cargo/git \
+    --mount=type=cache,target=/app/target \
+    cargo build --release --bin server
 
 # Runtime stage
 FROM alpine:latest AS runtime
@@ -63,7 +74,8 @@ COPY --from=builder /app/target/release/server /usr/local/bin/server
 # Prepare writable runtime directories for appuser
 ENV HOME=/home/appuser
 ENV XDG_DATA_HOME=/home/appuser/.local/share
-RUN mkdir -p /repos /home/appuser/.local/share && \
+ENV VIBEKANBAN_ASSET_DIR=/repos/.vibe-kanban-assets
+RUN mkdir -p /repos /repos/.vibe-kanban-assets /home/appuser/.local/share && \
     chown -R appuser:appgroup /repos /home/appuser
 
 # Switch to non-root user
