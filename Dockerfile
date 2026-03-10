@@ -60,9 +60,11 @@ RUN addgroup -g 1001 -S appgroup && \
 # Copy binary from builder
 COPY --from=builder /app/target/release/server /usr/local/bin/server
 
-# Create repos directory and set permissions
-RUN mkdir -p /repos && \
-    chown -R appuser:appgroup /repos
+# Prepare writable runtime directories for appuser
+ENV HOME=/home/appuser
+ENV XDG_DATA_HOME=/home/appuser/.local/share
+RUN mkdir -p /repos /home/appuser/.local/share && \
+    chown -R appuser:appgroup /repos /home/appuser
 
 # Switch to non-root user
 USER appuser
