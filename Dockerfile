@@ -85,9 +85,10 @@ COPY --from=builder /app/bin/server /usr/local/bin/server
 # Prepare writable runtime directories for appuser
 ENV HOME=/home/appuser
 ENV XDG_DATA_HOME=/home/appuser/.local/share
+ENV XDG_CACHE_HOME=/tmp/vibe-kanban-cache
 ENV VIBEKANBAN_ASSET_DIR=/repos/.vibe-kanban-assets
-RUN mkdir -p /repos /repos/.vibe-kanban-assets /home/appuser/.local/share && \
-    chown -R appuser:appgroup /repos /home/appuser
+RUN mkdir -p /repos /repos/.vibe-kanban-assets /home/appuser/.local/share /tmp/vibe-kanban-cache && \
+    chown -R appuser:appgroup /repos /home/appuser /tmp/vibe-kanban-cache
 
 # Switch to non-root user
 USER appuser
