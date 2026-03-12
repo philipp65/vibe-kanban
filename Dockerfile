@@ -47,6 +47,7 @@ COPY shared/ ./shared/
 COPY packages/local-web/ ./packages/local-web/
 COPY packages/web-core/ ./packages/web-core/
 COPY packages/ui/ ./packages/ui/
+COPY packages/public/ ./packages/public/
 COPY scripts/ ./scripts/
 COPY assets/ ./assets/
 COPY npx-cli/ ./npx-cli/
