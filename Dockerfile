@@ -39,8 +39,17 @@ RUN --mount=type=cache,target=/root/.npm \
     pnpm config set store-dir /pnpm/store && \
     pnpm install --frozen-lockfile
 
-# Copy source code
-COPY . .
+# Copy only sources needed for local-web + server build to
+# avoid invalidating cache from unrelated repository changes.
+COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
+COPY crates/ ./crates/
+COPY shared/ ./shared/
+COPY packages/local-web/ ./packages/local-web/
+COPY packages/web-core/ ./packages/web-core/
+COPY packages/ui/ ./packages/ui/
+COPY scripts/ ./scripts/
+COPY assets/ ./assets/
+COPY npx-cli/ ./npx-cli/
 
 # Build application
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
@@ -50,7 +59,9 @@ RUN cd packages/local-web && pnpm run build
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
     --mount=type=cache,target=/app/target \
-    cargo build --release --bin server
+    cargo build --release --bin server && \
+    mkdir -p /app/bin && \
+    cp /app/target/release/server /app/bin/server
 
 # Runtime stage
 FROM alpine:latest AS runtime
@@ -68,8 +79,8 @@ RUN apk add --no-cache \
 RUN addgroup -g 1001 -S appgroup && \
     adduser -u 1001 -S appuser -G appgroup
 
-# Copy binary from builder
-COPY --from=builder /app/target/release/server /usr/local/bin/server
+# Copy binary from builder (persisted outside target cache mount)
+COPY --from=builder /app/bin/server /usr/local/bin/server
 
 # Prepare writable runtime directories for appuser
 ENV HOME=/home/appuser
