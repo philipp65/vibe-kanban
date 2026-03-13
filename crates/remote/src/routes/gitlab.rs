@@ -25,6 +25,7 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/gitlab/import/project-issues", post(import_project_issues))
         .route("/gitlab/projects/search", get(search_projects))
+        .route("/gitlab/clone-url", post(resolve_clone_url))
 }
 
 #[derive(Debug, Deserialize)]
@@ -70,6 +71,16 @@ pub struct SearchGitLabProjectsRequest {
 #[derive(Debug, Serialize)]
 pub struct SearchGitLabProjectsResponse {
     pub projects: Vec<GitLabProjectSearchResult>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ResolveGitLabCloneUrlRequest {
+    pub clone_url: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ResolveGitLabCloneUrlResponse {
+    pub clone_url: String,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -167,6 +178,49 @@ fn parse_project_path_from_reference(base_url: &str, reference: &str) -> String 
     }
 
     trimmed.to_string()
+}
+
+fn build_authenticated_gitlab_clone_url(
+    configured_base_url: &str,
+    clone_url: &str,
+    access_token: &str,
+) -> Result<String, ErrorResponse> {
+    let configured = Url::parse(configured_base_url).map_err(|_| {
+        ErrorResponse::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "GitLab base URL is misconfigured",
+        )
+    })?;
+
+    let mut clone = Url::parse(clone_url.trim()).map_err(|_| {
+        ErrorResponse::new(
+            StatusCode::BAD_REQUEST,
+            "Clone URL must be a valid HTTPS GitLab URL",
+        )
+    })?;
+
+    if clone.scheme() != "https" {
+        return Err(ErrorResponse::new(
+            StatusCode::BAD_REQUEST,
+            "Only HTTPS clone URLs are supported for GitLab OAuth cloning",
+        ));
+    }
+
+    if clone.host_str() != configured.host_str() {
+        return Err(ErrorResponse::new(
+            StatusCode::BAD_REQUEST,
+            "Clone URL host does not match configured GitLab instance",
+        ));
+    }
+
+    clone
+        .set_username("oauth2")
+        .map_err(|_| ErrorResponse::new(StatusCode::BAD_REQUEST, "Invalid GitLab clone URL"))?;
+    clone
+        .set_password(Some(access_token))
+        .map_err(|_| ErrorResponse::new(StatusCode::BAD_REQUEST, "Invalid GitLab clone URL"))?;
+
+    Ok(clone.to_string())
 }
 
 async fn build_gitlab_error_response(
@@ -367,6 +421,19 @@ pub async fn search_projects(
     let projects = fetch_gitlab_projects(&state, &access_token, &base_url, &payload.query).await?;
 
     Ok(Json(SearchGitLabProjectsResponse { projects }))
+}
+
+pub async fn resolve_clone_url(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<RequestContext>,
+    Json(payload): Json<ResolveGitLabCloneUrlRequest>,
+) -> Result<Json<ResolveGitLabCloneUrlResponse>, ErrorResponse> {
+    let access_token = get_gitlab_access_token(&state, ctx.user.id).await?;
+    let base_url = gitlab_base_url(&state);
+    let clone_url =
+        build_authenticated_gitlab_clone_url(&base_url, &payload.clone_url, &access_token)?;
+
+    Ok(Json(ResolveGitLabCloneUrlResponse { clone_url }))
 }
 
 pub async fn import_project_issues(
