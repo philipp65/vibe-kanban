@@ -811,6 +811,19 @@ export const repoApi = {
     return handleApiResponse<Repo>(response);
   },
 
+  clone: async (data: {
+    parent_path: string;
+    clone_url: string;
+    folder_name?: string;
+    display_name?: string;
+  }): Promise<Repo> => {
+    const response = await makeRequest('/api/repos/clone', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    return handleApiResponse<Repo>(response);
+  },
+
   getBatch: async (ids: string[]): Promise<Repo[]> => {
     const response = await makeRequest('/api/repos/batch', {
       method: 'POST',

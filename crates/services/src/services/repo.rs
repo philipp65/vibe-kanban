@@ -1,4 +1,7 @@
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    process::Command,
+};
 
 use db::models::repo::{Repo as RepoModel, SearchMatchType, SearchResult};
 use git::{GitService, GitServiceError};
@@ -127,6 +130,70 @@ impl RepoService {
         Ok(repo)
     }
 
+    pub async fn clone_repo(
+        &self,
+        pool: &SqlitePool,
+        parent_path: &str,
+        clone_url: &str,
+        folder_name: Option<&str>,
+        display_name: Option<&str>,
+    ) -> Result<RepoModel> {
+        let clone_url = clone_url.trim();
+        if clone_url.is_empty() {
+            return Err(RepoError::Git(GitServiceError::InvalidRepository(
+                "Clone URL cannot be empty".to_string(),
+            )));
+        }
+
+        let normalized_parent = self.normalize_path(parent_path)?;
+        if !normalized_parent.exists() {
+            return Err(RepoError::PathNotFound(normalized_parent));
+        }
+        if !normalized_parent.is_dir() {
+            return Err(RepoError::PathNotDirectory(normalized_parent));
+        }
+
+        let repo_folder_name = match folder_name.map(str::trim).filter(|name| !name.is_empty()) {
+            Some(name) => {
+                if name.contains('/')
+                    || name.contains('\\')
+                    || name == "."
+                    || name == ".."
+                    || name.is_empty()
+                {
+                    return Err(RepoError::InvalidFolderName(name.to_string()));
+                }
+                name.to_string()
+            }
+            None => derive_repo_name_from_clone_url(clone_url)?,
+        };
+
+        let repo_path = normalized_parent.join(&repo_folder_name);
+        if repo_path.exists() {
+            return Err(RepoError::DirectoryAlreadyExists(repo_path));
+        }
+
+        let output = Command::new("git")
+            .arg("clone")
+            .arg(clone_url)
+            .arg(&repo_path)
+            .output()?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            let message = if stderr.is_empty() {
+                "git clone failed".to_string()
+            } else {
+                format!("git clone failed: {stderr}")
+            };
+            return Err(RepoError::Git(GitServiceError::InvalidRepository(message)));
+        }
+
+        let display_name = display_name.unwrap_or(&repo_folder_name);
+        let repo = RepoModel::find_or_create(pool, &repo_path, display_name).await?;
+        Ok(repo)
+    }
+
     pub async fn search_files(
         &self,
         cache: &FileSearchCache,
@@ -187,4 +254,22 @@ impl RepoService {
         all_results.truncate(10);
         Ok(all_results)
     }
+}
+
+fn derive_repo_name_from_clone_url(clone_url: &str) -> Result<String> {
+    let candidate = clone_url
+        .trim_end_matches('/')
+        .rsplit(|ch| ['/', ':'].contains(&ch))
+        .next()
+        .unwrap_or("")
+        .trim_end_matches(".git")
+        .trim();
+
+    if candidate.is_empty() {
+        return Err(RepoError::Git(GitServiceError::InvalidRepository(
+            "Unable to determine repository name from clone URL".to_string(),
+        )));
+    }
+
+    Ok(candidate.to_string())
 }

@@ -43,6 +43,14 @@ pub struct InitRepoRequest {
 }
 
 #[derive(Debug, Deserialize, TS)]
+pub struct CloneRepoRequest {
+    pub parent_path: String,
+    pub clone_url: String,
+    pub folder_name: Option<String>,
+    pub display_name: Option<String>,
+}
+
+#[derive(Debug, Deserialize, TS)]
 pub struct BatchRepoRequest {
     pub ids: Vec<Uuid>,
 }
@@ -74,6 +82,24 @@ pub async fn init_repo(
             deployment.git(),
             &payload.parent_path,
             &payload.folder_name,
+        )
+        .await?;
+
+    Ok(ResponseJson(ApiResponse::success(repo)))
+}
+
+pub async fn clone_repo(
+    State(deployment): State<DeploymentImpl>,
+    ResponseJson(payload): ResponseJson<CloneRepoRequest>,
+) -> Result<ResponseJson<ApiResponse<Repo>>, ApiError> {
+    let repo = deployment
+        .repo()
+        .clone_repo(
+            &deployment.db().pool,
+            &payload.parent_path,
+            &payload.clone_url,
+            payload.folder_name.as_deref(),
+            payload.display_name.as_deref(),
         )
         .await?;
 
@@ -339,6 +365,7 @@ pub fn router() -> Router<DeploymentImpl> {
         .route("/repos", get(get_repos).post(register_repo))
         .route("/repos/recent", get(get_recent_repos))
         .route("/repos/init", post(init_repo))
+        .route("/repos/clone", post(clone_repo))
         .route("/repos/batch", post(get_repos_batch))
         .route(
             "/repos/{repo_id}",
