@@ -71,6 +71,7 @@ FROM alpine:latest AS runtime
 RUN apk add --no-cache \
     ca-certificates \
     tini \
+    su-exec \
     libgcc \
     wget \
     git \
@@ -91,8 +92,17 @@ ENV VIBEKANBAN_ASSET_DIR=/repos/.vibe-kanban-assets
 RUN mkdir -p /repos /repos/.vibe-kanban-assets /home/appuser/.local/share /tmp/vibe-kanban-cache && \
     chown -R appuser:appgroup /repos /home/appuser /tmp/vibe-kanban-cache
 
-# Switch to non-root user
-USER appuser
+# Ensure bind-mounted host paths are writable on every boot.
+RUN cat <<'EOF' > /usr/local/bin/docker-entrypoint.sh
+#!/bin/sh
+set -eu
+
+mkdir -p /repos /repos/.vibe-kanban-assets /home/appuser/.local/share /tmp/vibe-kanban-cache
+chown -R appuser:appgroup /repos /home/appuser /tmp/vibe-kanban-cache
+
+exec su-exec appuser "$@"
+EOF
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 # Set runtime environment
 ENV HOST=0.0.0.0
@@ -107,5 +117,5 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD wget --quiet --tries=1 --spider "http://${HOST:-localhost}:${PORT:-3000}" || exit 1
 
 # Run the application
-ENTRYPOINT ["/sbin/tini", "--"]
+ENTRYPOINT ["/sbin/tini", "--", "/usr/local/bin/docker-entrypoint.sh"]
 CMD ["server"]
