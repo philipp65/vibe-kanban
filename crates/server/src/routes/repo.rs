@@ -14,6 +14,7 @@ use git_host::{GitHostError, GitHostProvider, GitHostService, OpenPrInfo, Provid
 use serde::{Deserialize, Serialize};
 use services::services::file_search::SearchQuery;
 use ts_rs::TS;
+use url::Url;
 use utils::response::ApiResponse;
 use uuid::Uuid;
 
@@ -40,6 +41,14 @@ pub struct RegisterRepoRequest {
 pub struct InitRepoRequest {
     pub parent_path: String,
     pub folder_name: String,
+}
+
+#[derive(Debug, Deserialize, TS)]
+pub struct CloneRepoRequest {
+    pub parent_path: String,
+    pub clone_url: String,
+    pub folder_name: Option<String>,
+    pub display_name: Option<String>,
 }
 
 #[derive(Debug, Deserialize, TS)]
@@ -78,6 +87,69 @@ pub async fn init_repo(
         .await?;
 
     Ok(ResponseJson(ApiResponse::success(repo)))
+}
+
+pub async fn clone_repo(
+    State(deployment): State<DeploymentImpl>,
+    ResponseJson(payload): ResponseJson<CloneRepoRequest>,
+) -> Result<ResponseJson<ApiResponse<Repo>>, ApiError> {
+    let clone_url =
+        maybe_resolve_gitlab_authenticated_clone_url(&deployment, &payload.clone_url).await?;
+
+    let repo = deployment
+        .repo()
+        .clone_repo(
+            &deployment.db().pool,
+            &payload.parent_path,
+            &clone_url,
+            payload.folder_name.as_deref(),
+            payload.display_name.as_deref(),
+        )
+        .await?;
+
+    Ok(ResponseJson(ApiResponse::success(repo)))
+}
+
+async fn maybe_resolve_gitlab_authenticated_clone_url(
+    deployment: &DeploymentImpl,
+    clone_url: &str,
+) -> Result<String, ApiError> {
+    if !is_gitlab_https_url(clone_url, deployment).await {
+        return Ok(clone_url.to_string());
+    }
+
+    let client = deployment.remote_client()?;
+    client
+        .resolve_gitlab_clone_url(clone_url)
+        .await
+        .map_err(|e| ApiError::BadRequest(format!("Failed to prepare GitLab clone auth: {e}")))
+}
+
+async fn is_gitlab_https_url(clone_url: &str, deployment: &DeploymentImpl) -> bool {
+    let Ok(parsed) = Url::parse(clone_url.trim()) else {
+        return false;
+    };
+    if parsed.scheme() != "https" {
+        return false;
+    }
+
+    let Some(host) = parsed.host_str().map(|h| h.to_ascii_lowercase()) else {
+        return false;
+    };
+
+    let configured_gitlab_host = {
+        let cfg = deployment.config().read().await;
+        cfg.gitlab_instance_url
+            .as_deref()
+            .and_then(|base| Url::parse(base).ok())
+            .and_then(|u| u.host_str().map(|h| h.to_ascii_lowercase()))
+    };
+
+    if let Some(expected_host) = configured_gitlab_host {
+        return host == expected_host;
+    }
+
+    host.contains("gitlab")
 }
 
 pub async fn get_repo_branches(
@@ -263,7 +335,16 @@ pub async fn list_open_prs(
         None => deployment.git().get_default_remote(&repo.path)?,
     };
 
-    let git_host = match GitHostService::from_url(&remote.url) {
+    let gitlab_domains = {
+        let config = deployment.config().read().await;
+        config
+            .gitlab_instance_url
+            .as_ref()
+            .map(|url| vec![url.clone()])
+            .unwrap_or_default()
+    };
+    let git_host = match GitHostService::from_url_with_gitlab_domains(&remote.url, &gitlab_domains)
+    {
         Ok(host) => host,
         Err(GitHostError::UnsupportedProvider) => {
             return Ok(ResponseJson(ApiResponse::error_with_data(
@@ -330,6 +411,7 @@ pub fn router() -> Router<DeploymentImpl> {
         .route("/repos", get(get_repos).post(register_repo))
         .route("/repos/recent", get(get_recent_repos))
         .route("/repos/init", post(init_repo))
+        .route("/repos/clone", post(clone_repo))
         .route("/repos/batch", post(get_repos_batch))
         .route(
             "/repos/{repo_id}",

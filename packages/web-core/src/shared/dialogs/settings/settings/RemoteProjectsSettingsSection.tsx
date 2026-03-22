@@ -43,7 +43,7 @@ import { OAuthDialog } from '@/shared/dialogs/global/OAuthDialog';
 import { CreateRemoteProjectDialog } from '@/shared/dialogs/org/CreateRemoteProjectDialog';
 import { DeleteRemoteProjectDialog } from '@/shared/dialogs/org/DeleteRemoteProjectDialog';
 import { useShape } from '@/shared/integrations/electric/hooks';
-import { bulkUpdateProjectStatuses } from '@/shared/lib/remoteApi';
+import { bulkUpdateProjects } from '@/shared/lib/remoteApi';
 
 import {
   PROJECTS_SHAPE,
@@ -69,7 +69,8 @@ import {
 } from './SettingsComponents';
 import { useSettingsDirty } from './SettingsDirtyContext';
 import type { DraftWorkspaceRepo, GitBranch, Repo } from 'shared/types';
-import { repoApi } from '@/shared/lib/api';
+import { remoteProjectsApi, repoApi } from '@/shared/lib/api';
+import { GitLabProjectImportDialog } from './GitLabProjectImportDialog';
 import {
   SelectionDialog,
   type SelectionPage,
@@ -339,6 +340,9 @@ export function RemoteProjectsSettingsSection({
   const { t } = useTranslation(['settings', 'common', 'projects']);
   const { setDirty: setContextDirty } = useSettingsDirty();
   const { isSignedIn, isLoaded } = useAuth();
+  const hasHostContext =
+    typeof window !== 'undefined' &&
+    /\/hosts\/[^/]+/.test(window.location.pathname);
 
   // Selection state - initialize with provided values
   const [selectedOrgId, setSelectedOrgId] = useState<string | null>(
@@ -355,6 +359,7 @@ export function RemoteProjectsSettingsSection({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isImportingGitLab, setIsImportingGitLab] = useState(false);
 
   // Default repos state
   const [defaultRepos, setDefaultRepos] = useState<DraftWorkspaceRepo[]>([]);
@@ -402,7 +407,6 @@ export function RemoteProjectsSettingsSection({
   const {
     data: projects,
     isLoading: projectsLoading,
-    update,
     remove,
   } = useShape(PROJECTS_SHAPE, params, {
     enabled: !!selectedOrgId,
@@ -504,15 +508,21 @@ export function RemoteProjectsSettingsSection({
       setDefaultReposError(null);
       return;
     }
+    if (!hasHostContext) {
+      setDefaultRepos([]);
+      setAllRepos([]);
+      setDefaultReposError(null);
+      setIsLoadingDefaults(false);
+      return;
+    }
     setIsLoadingDefaults(true);
     setDefaultReposError(null);
 
     Promise.all([
       getProjectRepoDefaults(selectedProjectId),
       repoApi.list().catch(() => {
-        setDefaultReposError(
-          t('settings:settings.remoteProjects.form.defaultRepos.fetchError')
-        );
+        // In remote/cloud usage there may be no local repo registry available.
+        // Treat this as "no registered repos" rather than a hard error.
         return [] as Repo[];
       }),
     ])
@@ -522,7 +532,7 @@ export function RemoteProjectsSettingsSection({
       })
       .catch(() => setDefaultRepos([]))
       .finally(() => setIsLoadingDefaults(false));
-  }, [selectedProjectId, t]);
+  }, [selectedProjectId, hasHostContext]);
 
   const defaultRepoIds = useMemo(
     () => new Set(defaultRepos.map((r) => r.repo_id)),
@@ -767,7 +777,7 @@ export function RemoteProjectsSettingsSection({
       }
     }
 
-    const bulkUpdates: {
+    const statusUpdates: {
       id: string;
       changes: Partial<{
         name: string;
@@ -798,23 +808,23 @@ export function RemoteProjectsSettingsSection({
         color: string;
         sort_order: number;
         hidden: boolean;
-      }> = {
-        sort_order: local.sort_order,
-      };
+      }> = {};
 
       if (local.name !== original.name) changes.name = local.name;
       if (local.color !== original.color) changes.color = local.color;
+      if (local.sort_order !== original.sort_order)
+        changes.sort_order = local.sort_order;
       if (local.hidden !== original.hidden) changes.hidden = local.hidden;
 
-      bulkUpdates.push({ id: local.id, changes });
+      if (Object.keys(changes).length > 0) {
+        statusUpdates.push({ id: local.id, changes });
+      }
     }
 
-    if (bulkUpdates.length > 1) {
-      await bulkUpdateProjectStatuses(bulkUpdates);
-    } else if (bulkUpdates.length === 1) {
+    for (const statusUpdate of statusUpdates) {
       const result = updateProjectStatus(
-        bulkUpdates[0].id,
-        bulkUpdates[0].changes
+        statusUpdate.id,
+        statusUpdate.changes
       );
       mutationPromises.push(result.persisted);
     }
@@ -892,6 +902,51 @@ export function RemoteProjectsSettingsSection({
     }
   };
 
+  const handleImportGitLabProject = async () => {
+    if (!selectedOrgId) return;
+
+    setError(null);
+    setSuccess(null);
+    setIsImportingGitLab(true);
+
+    try {
+      const gitlabProjectPath = (await GitLabProjectImportDialog.show())?.trim();
+      if (!gitlabProjectPath) return;
+
+      const result = await remoteProjectsApi.importGitLabProjectIssues({
+        organization_id: selectedOrgId,
+        gitlab_project_path: gitlabProjectPath,
+      });
+
+      setSelectedProjectId(result.project_id);
+      setFormState({
+        name: result.project_name,
+        color: '217 91% 60%',
+      });
+      setHasStatusChanges(false);
+      setEditingStatusId(null);
+      setEditingStatusColorId(null);
+      setSuccess(
+        t(
+          'settings.remoteProjects.importGitLab.success',
+          'Imported project and issues from GitLab successfully'
+        )
+      );
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (importError) {
+      const message =
+        importError instanceof Error
+          ? importError.message
+          : t(
+              'settings.remoteProjects.importGitLab.error',
+              'Failed to import project from GitLab'
+            );
+      setError(message);
+    } finally {
+      setIsImportingGitLab(false);
+    }
+  };
+
   const handleDeleteProject = async (project: Project) => {
     try {
       const result = await DeleteRemoteProjectDialog.show({
@@ -933,11 +988,15 @@ export function RemoteProjectsSettingsSection({
 
     try {
       if (isProjectDirty) {
-        const result = update(selectedProjectId, {
-          name: trimmedName,
-          color: formState.color,
-        });
-        await result.persisted;
+        await bulkUpdateProjects([
+          {
+            id: selectedProjectId,
+            changes: {
+              name: trimmedName,
+              color: formState.color,
+            },
+          },
+        ]);
       }
 
       if (hasStatusChanges) {
@@ -1100,17 +1159,41 @@ export function RemoteProjectsSettingsSection({
             label={t('settings.remoteProjects.columns.projects', 'Projects')}
             headerAction={
               selectedOrgId && (
-                <button
-                  className="p-half rounded-sm hover:bg-secondary text-low hover:text-normal"
-                  onClick={handleCreateProject}
-                  disabled={isSaving}
-                  title={t(
-                    'settings.remoteProjects.actions.addProject',
-                    'Add Project'
-                  )}
-                >
-                  <PlusIcon className="size-icon-2xs" weight="bold" />
-                </button>
+                <div className="flex items-center gap-half">
+                  <button
+                    className="px-half py-1 rounded-sm hover:bg-secondary text-low hover:text-normal inline-flex items-center gap-half"
+                    onClick={handleImportGitLabProject}
+                    disabled={isSaving || isImportingGitLab}
+                    title={t(
+                      'settings.remoteProjects.actions.importGitLabProject',
+                      'Import from GitLab project'
+                    )}
+                  >
+                    <PlusIcon className="size-icon-2xs" weight="bold" />
+                    <span className="text-xs">
+                      {isImportingGitLab
+                        ? t(
+                            'settings.remoteProjects.actions.importGitLabProjectLoading',
+                            'Importing...'
+                          )
+                        : t(
+                            'settings.remoteProjects.actions.importGitLabProject',
+                            'Import from GitLab project'
+                          )}
+                    </span>
+                  </button>
+                  <button
+                    className="p-half rounded-sm hover:bg-secondary text-low hover:text-normal"
+                    onClick={handleCreateProject}
+                    disabled={isSaving}
+                    title={t(
+                      'settings.remoteProjects.actions.addProject',
+                      'Add Project'
+                    )}
+                  >
+                    <PlusIcon className="size-icon-2xs" weight="bold" />
+                  </button>
+                </div>
               )
             }
           >
@@ -1198,7 +1281,7 @@ export function RemoteProjectsSettingsSection({
           </div>
         )}
 
-        {selectedProjectId && (
+        {selectedProjectId && hasHostContext && (
           <div
             className={cn(
               'bg-secondary/50 border border-border rounded-sm p-4 space-y-base',
@@ -1363,6 +1446,16 @@ export function RemoteProjectsSettingsSection({
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+          </div>
+        )}
+        {selectedProjectId && !hasHostContext && (
+          <div className="bg-secondary/30 border border-border rounded-sm p-4">
+            <p className="text-sm text-low">
+              {t(
+                'settings.remoteProjects.form.defaultRepos.hostContextHint',
+                'Default repositories can only be configured inside a host-scoped workspace route.'
+              )}
+            </p>
           </div>
         )}
 

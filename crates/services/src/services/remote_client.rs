@@ -991,6 +991,30 @@ impl RemoteClient {
             .map_err(|e| RemoteClientError::Transport(e.to_string()))?;
         Ok(bytes.to_vec())
     }
+
+    /// Resolves a GitLab clone URL to an authenticated URL using linked GitLab OAuth.
+    pub async fn resolve_gitlab_clone_url(
+        &self,
+        clone_url: &str,
+    ) -> Result<String, RemoteClientError> {
+        #[derive(Serialize)]
+        struct ResolveGitLabCloneUrlRequest<'a> {
+            clone_url: &'a str,
+        }
+        #[derive(Deserialize)]
+        struct ResolveGitLabCloneUrlResponse {
+            clone_url: String,
+        }
+
+        let response: ResolveGitLabCloneUrlResponse = self
+            .post_authed(
+                "/v1/gitlab/clone-url",
+                Some(&ResolveGitLabCloneUrlRequest { clone_url }),
+            )
+            .await?;
+
+        Ok(response.clone_url)
+    }
 }
 
 fn map_reqwest_error(e: reqwest::Error) -> RemoteClientError {

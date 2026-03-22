@@ -541,6 +541,7 @@ fn ensure_email(provider: &str, profile: &ProviderUser) -> String {
     match provider {
         "github" => format!("{}@users.noreply.github.com", profile.id),
         "google" => format!("{}@users.noreply.google.com", profile.id),
+        "gitlab" => format!("{}@users.noreply.gitlab.com", profile.id),
         _ => format!("{}@oauth.local", profile.id),
     }
 }

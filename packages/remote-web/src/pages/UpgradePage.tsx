@@ -247,6 +247,14 @@ export default function UpgradePage() {
                     loading={oauthLoading === "github"}
                   />
                   <OAuthButton
+                    label="Continue with GitLab"
+                    onClick={() => {
+                      void handleOAuthLogin("gitlab");
+                    }}
+                    disabled={oauthLoading !== null}
+                    loading={oauthLoading === "gitlab"}
+                  />
+                  <OAuthButton
                     label="Continue with Google"
                     onClick={() => {
                       void handleOAuthLogin("google");

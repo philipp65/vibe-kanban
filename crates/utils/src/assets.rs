@@ -4,18 +4,31 @@ use rust_embed::RustEmbed;
 const PROJECT_ROOT: &str = env!("CARGO_MANIFEST_DIR");
 
 pub fn asset_dir() -> std::path::PathBuf {
-    let path = if cfg!(debug_assertions) {
+    let preferred_path = if cfg!(debug_assertions) {
         std::path::PathBuf::from(PROJECT_ROOT).join("../../dev_assets")
+    } else if let Ok(path) = std::env::var("VIBEKANBAN_ASSET_DIR") {
+        std::path::PathBuf::from(path)
     } else {
         prod_asset_dir_path()
     };
 
-    // Ensure the directory exists
-    if !path.exists() {
-        std::fs::create_dir_all(&path).expect("Failed to create asset directory");
+    if std::fs::create_dir_all(&preferred_path).is_ok() {
+        return preferred_path;
     }
 
-    path
+    // Fallback for containerized environments where the home/data directory
+    // may be mounted read-only or owned by a different UID.
+    let fallback_path = std::path::PathBuf::from("/tmp/vibe-kanban-assets");
+    if std::fs::create_dir_all(&fallback_path).is_ok() {
+        return fallback_path;
+    }
+
+    panic!(
+        "Failed to create asset directory at '{}' and fallback '{}'",
+        preferred_path.display(),
+        fallback_path.display()
+    );
+
     // ✔ macOS → ~/Library/Application Support/MyApp
     // ✔ Linux → ~/.local/share/myapp   (respects XDG_DATA_HOME)
     // ✔ Windows → %APPDATA%\Example\MyApp

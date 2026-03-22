@@ -104,12 +104,19 @@ const CreateWorkspaceFromPrDialogImpl =
       [openPrs, selectedPrNumber]
     );
 
+    const getProviderDisplayName = (provider: string) => {
+      if (provider === 'git_hub') return 'GitHub';
+      if (provider === 'git_lab') return 'GitLab';
+      if (provider === 'azure_dev_ops') return 'Azure DevOps';
+      return provider;
+    };
+
     let prsErrorMessage: string | null = null;
     if (prsResult?.success === false) {
       switch (prsResult.error?.type) {
         case 'cli_not_installed':
           prsErrorMessage = t('createWorkspaceFromPr.errors.cliNotInstalled', {
-            provider: prsResult.error.provider,
+            provider: getProviderDisplayName(prsResult.error.provider),
           });
           break;
         case 'auth_failed':
@@ -158,7 +165,7 @@ const CreateWorkspaceFromPrDialogImpl =
             case 'cli_not_installed':
               throw new Error(
                 t('createWorkspaceFromPr.errors.cliNotInstalled', {
-                  provider: result.error.provider,
+                  provider: getProviderDisplayName(result.error.provider),
                 })
               );
             case 'pr_not_found':

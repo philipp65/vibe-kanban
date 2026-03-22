@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
 use api_types::{PullRequestStatus, UpsertPullRequestRequest};
 use chrono::Utc;
@@ -13,12 +13,12 @@ use git_host::{GitHostError, GitHostProvider, GitHostService};
 use serde_json::json;
 use sqlx::error::Error as SqlxError;
 use thiserror::Error;
-use tokio::time::interval;
+use tokio::{sync::RwLock, time::interval};
 use tracing::{debug, error, info, warn};
 
 use crate::services::{
-    analytics::AnalyticsContext, container::ContainerService, remote_client::RemoteClient,
-    remote_sync,
+    analytics::AnalyticsContext, config::Config, container::ContainerService,
+    remote_client::RemoteClient, remote_sync,
 };
 
 #[derive(Debug, Error)]
@@ -49,6 +49,7 @@ pub struct PrMonitorService<C: ContainerService> {
     analytics: Option<AnalyticsContext>,
     container: C,
     remote_client: Option<RemoteClient>,
+    config: Arc<RwLock<Config>>,
 }
 
 impl<C: ContainerService + Send + Sync + 'static> PrMonitorService<C> {
@@ -57,6 +58,7 @@ impl<C: ContainerService + Send + Sync + 'static> PrMonitorService<C> {
         analytics: Option<AnalyticsContext>,
         container: C,
         remote_client: Option<RemoteClient>,
+        config: Arc<RwLock<Config>>,
     ) -> tokio::task::JoinHandle<()> {
         let service = Self {
             db,
@@ -64,6 +66,7 @@ impl<C: ContainerService + Send + Sync + 'static> PrMonitorService<C> {
             analytics,
             container,
             remote_client,
+            config,
         };
         tokio::spawn(async move {
             service.start().await;
@@ -115,9 +118,20 @@ impl<C: ContainerService + Send + Sync + 'static> PrMonitorService<C> {
         Ok(())
     }
 
+    async fn get_custom_gitlab_domains(&self) -> Vec<String> {
+        let config = self.config.read().await;
+        config
+            .gitlab_instance_url
+            .as_ref()
+            .map(|url| vec![url.clone()])
+            .unwrap_or_default()
+    }
+
     /// Check the status of a specific PR
     async fn check_pr_status(&self, pr_merge: &PrMerge) -> Result<(), PrMonitorError> {
-        let git_host = GitHostService::from_url(&pr_merge.pr_info.url)?;
+        let gitlab_domains = self.get_custom_gitlab_domains().await;
+        let git_host =
+            GitHostService::from_url_with_gitlab_domains(&pr_merge.pr_info.url, &gitlab_domains)?;
         let pr_status = git_host.get_pr_status(&pr_merge.pr_info.url).await?;
 
         debug!(

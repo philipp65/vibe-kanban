@@ -594,6 +594,25 @@ export function GeneralSettingsSection() {
         </SettingsField>
       </SettingsCard>
 
+      {/* GitLab */}
+      <SettingsCard
+        title={t('settings.general.gitlab.title')}
+        description={t('settings.general.gitlab.description')}
+      >
+        <SettingsField
+          label={t('settings.general.gitlab.instanceUrl.label')}
+          description={t('settings.general.gitlab.instanceUrl.helper')}
+        >
+          <SettingsInput
+            value={(draft as { gitlab_instance_url?: string | null } | null)?.gitlab_instance_url ?? ''}
+            onChange={(value) =>
+              updateDraft({ gitlab_instance_url: value || null } as Partial<typeof config>)
+            }
+            placeholder="https://gitlab.mycompany.com"
+          />
+        </SettingsField>
+      </SettingsCard>
+
       {/* Pull Requests */}
       <SettingsCard
         title={t('settings.general.pullRequests.title')}

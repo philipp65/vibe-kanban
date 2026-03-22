@@ -8,6 +8,7 @@ use ts_rs::TS;
 pub enum ProviderKind {
     GitHub,
     AzureDevOps,
+    GitLab,
     Unknown,
 }
 
@@ -16,6 +17,7 @@ impl std::fmt::Display for ProviderKind {
         match self {
             ProviderKind::GitHub => write!(f, "GitHub"),
             ProviderKind::AzureDevOps => write!(f, "Azure DevOps"),
+            ProviderKind::GitLab => write!(f, "GitLab"),
             ProviderKind::Unknown => write!(f, "Unknown"),
         }
     }

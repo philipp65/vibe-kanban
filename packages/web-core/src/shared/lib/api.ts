@@ -811,6 +811,19 @@ export const repoApi = {
     return handleApiResponse<Repo>(response);
   },
 
+  clone: async (data: {
+    parent_path: string;
+    clone_url: string;
+    folder_name?: string;
+    display_name?: string;
+  }): Promise<Repo> => {
+    const response = await makeRequest('/api/repos/clone', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    return handleApiResponse<Repo>(response);
+  },
+
   getBatch: async (ids: string[]): Promise<Repo[]> => {
     const response = await makeRequest('/api/repos/batch', {
       method: 'POST',
@@ -1337,6 +1350,50 @@ export const remoteProjectsApi = {
     );
     const result =
       await handleApiResponse<ListRemoteProjectsResponse>(response);
+    return result.projects;
+  },
+
+  importGitLabProjectIssues: async (data: {
+    organization_id: string;
+    gitlab_project_path: string;
+    include_closed_issues?: boolean;
+  }): Promise<{
+    project_id: string;
+    project_name: string;
+    imported_issues: number;
+  }> => {
+    const response = await makeRemoteRequest('/v1/gitlab/import/project-issues', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return handleRemoteResponse<{
+      project_id: string;
+      project_name: string;
+      imported_issues: number;
+    }>(response);
+  },
+  searchGitLabProjects: async (query: string): Promise<
+    {
+      id: number;
+      name: string;
+      path_with_namespace: string;
+      name_with_namespace?: string | null;
+      web_url?: string | null;
+    }[]
+  > => {
+    const response = await makeRemoteRequest(
+      `/v1/gitlab/projects/search?query=${encodeURIComponent(query)}`
+    );
+    const result = await handleRemoteResponse<{
+      projects: {
+        id: number;
+        name: string;
+        path_with_namespace: string;
+        name_with_namespace?: string | null;
+        web_url?: string | null;
+      }[];
+    }>(response);
     return result.projects;
   },
 };

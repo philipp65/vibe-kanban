@@ -135,6 +135,14 @@
           }
         }
       },
+      "gitlab": {
+        "title": "GitLab Integration",
+        "description": "Configure the GitLab instance used for CLI authentication prompts.",
+        "instanceUrl": {
+          "label": "GitLab Instance URL",
+          "helper": "Used as the default GitLab host when logging in with glab."
+        }
+      },
       "git": {
         "title": "Git",
         "description": "Configure git branch naming preferences",
@@ -550,7 +558,23 @@
         "projects": "Projects"
       },
       "actions": {
-        "addProject": "Add Project"
+        "addProject": "Add Project",
+        "importGitLabProject": "Import from GitLab project",
+        "importGitLabProjectLoading": "Importing..."
+      },
+      "importGitLab": {
+        "pathPrompt": "Enter GitLab project path (for example: group/project):",
+        "success": "Imported project and issues from GitLab successfully",
+        "error": "Failed to import project from GitLab",
+        "dialog": {
+          "title": "Import from GitLab project",
+          "description": "Search and select a GitLab project to import its issues.",
+          "searchPlaceholder": "Search by project name or namespace",
+          "searching": "Searching projects...",
+          "searchError": "Failed to search GitLab projects",
+          "empty": "No GitLab projects found",
+          "import": "Import"
+        }
       },
       "form": {
         "name": {
@@ -615,6 +639,14 @@
             "andAuthenticate": "and then authenticate with your GitHub account."
           }
         }
+      }
+    },
+    "gitlab": {
+      "cliSetup": {
+        "title": "GitLab CLI Setup",
+        "description": "GitLab CLI authentication is required to create pull requests on GitLab repositories.",
+        "installLabel": "Install GitLab CLI (glab):",
+        "loginLabel": "Authenticate with your GitLab account:"
       }
     }
   }

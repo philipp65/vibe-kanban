@@ -1,10 +1,10 @@
 import { cn } from '../lib/cn';
-import { SpinnerIcon } from '@phosphor-icons/react';
+import { GitlabLogoIcon, SpinnerIcon } from '@phosphor-icons/react';
 import { GitHubDark } from 'developer-icons';
 import { useTranslation } from 'react-i18next';
 import { GoogleLogo } from './GoogleLogo';
 
-export type OAuthProvider = 'github' | 'google';
+export type OAuthProvider = 'github' | 'google' | 'gitlab';
 
 interface OAuthSignInButtonProps {
   provider: OAuthProvider;
@@ -18,11 +18,18 @@ interface OAuthSignInButtonProps {
 const providerConfig = {
   github: {
     i18nKey: 'oauth.continueWithGitHub' as const,
+    fallbackLabel: 'Continue with GitHub',
     icon: () => <GitHubDark className="size-5" />,
   },
   google: {
     i18nKey: 'oauth.continueWithGoogle' as const,
+    fallbackLabel: 'Continue with Google',
     icon: () => <GoogleLogo className="size-5" />,
+  },
+  gitlab: {
+    i18nKey: 'oauth.continueWithGitLab' as const,
+    fallbackLabel: 'Continue with GitLab',
+    icon: () => <GitlabLogoIcon className="size-5" weight="fill" />,
   },
 };
 
@@ -66,7 +73,9 @@ export function OAuthSignInButton({
           )}
         </span>
         <span className="truncate text-center">
-          {loading && loadingText ? loadingText : t(config.i18nKey)}
+          {loading && loadingText
+            ? loadingText
+            : t(config.i18nKey, config.fallbackLabel)}
         </span>
         <span aria-hidden="true" className="h-5 w-5" />
       </span>

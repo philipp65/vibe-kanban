@@ -221,6 +221,15 @@ export function CreateModeRepoPickerBar({
             queryClient.invalidateQueries({ queryKey: ['repos'] });
             await addRepoWithBranchSelection(repo);
           },
+          onCloneRepo: async ({ parentPath, cloneUrl, folderName }) => {
+            const repo = await repoApi.clone({
+              parent_path: parentPath,
+              clone_url: cloneUrl,
+              folder_name: folderName,
+            });
+            queryClient.invalidateQueries({ queryKey: ['repos'] });
+            await addRepoWithBranchSelection(repo);
+          },
         });
       },
       'Failed to create repository'
